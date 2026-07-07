@@ -1,7 +1,7 @@
-name: Deploy to Cloudflare Pages
+name: Deploy to Cloudflare Pages (manual backup)
+# 平时不自动跑:正式部署走 Cloudflare 原生 Git 集成(项目 vpn)。
+# 万一 Cloudflare 构建故障,可在 GitHub Actions 页面手动点 Run workflow 应急发布。
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 jobs:
   deploy:
@@ -11,7 +11,7 @@ jobs:
       - name: Prepare files
         run: mkdir -p /tmp/out && rsync -a --exclude='.git' --exclude='.github' ./ /tmp/out/
       - name: Deploy to Pages
-        run: npx wrangler@4 pages deploy /tmp/out --project-name=edgetunnel --branch=main --commit-dirty=true
+        run: npx wrangler@4 pages deploy /tmp/out --project-name=vpn --branch=main --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
