@@ -1,0 +1,17 @@
+name: Deploy to Cloudflare Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare files
+        run: mkdir -p /tmp/out && rsync -a --exclude='.git' --exclude='.github' ./ /tmp/out/
+      - name: Deploy to Pages
+        run: npx wrangler@4 pages deploy /tmp/out --project-name=edgetunnel --branch=main --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
