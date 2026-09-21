@@ -54,10 +54,13 @@ jobs:
           for f in deploy-mirror.yml sync-fallback.yml; do
             [ -f ".github/workflows/$f" ] && cp ".github/workflows/$f" /tmp/keep/ || true
           done
+          # 本仓库独有的订阅转换模板，同样要保住
+          [ -d sub-config ] && cp -r sub-config /tmp/keep-subconfig || true
 
           git reset --hard upstream/main
           mkdir -p .github/workflows
           cp /tmp/keep/. .github/workflows/ -r 2>/dev/null || true
+          [ -d /tmp/keep-subconfig ] && cp -r /tmp/keep-subconfig sub-config || true
 
           if git diff --quiet && git diff --cached --quiet; then
             echo "对齐后无差异，直接推送对齐结果。"
