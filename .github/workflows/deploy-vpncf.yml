@@ -1,0 +1,68 @@
+name: Deploy to VPNCF Pages
+
+# 自动部署到 Cloudflare Pages（VPNCF 账号，项目 vpn，域名 mfvpn.de5.net）
+#
+# 触发链路：
+#   cmliu/edgetunnel 更新
+#     └─> Upstream Sync（sync.yml，每天 UTC 00:00）把上游合并进本 fork 的 main
+#           └─> 本 workflow 经 workflow_run 触发，部署到 VPNCF
+#
+# ⚠️ 为什么用 workflow_run 而不是 on:push —— GitHub 规定：用内置 GITHUB_TOKEN
+#    推送产生的 push 事件【不会】触发其它 workflow（防无限循环）。sync.yml 正是
+#    用 GITHUB_TOKEN 推的，所以单靠 on:push 永远不会跑。两个触发都留着做双保险。
+
+on:
+  workflow_run:
+    workflows: ["Upstream Sync"]
+    types: [completed]
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'CHANGELOG'
+      - 'LICENSE'
+      - '.github/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-vpncf
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # workflow_run 触发时只在上游同步成功后才部署；其它触发方式直接放行
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p /tmp/out
+          rsync -a \
+            --exclude='.git' --exclude='.github' --exclude='.gitignore' \
+            --exclude='wrangler.toml' \
+            --exclude='README.md' --exclude='CHANGELOG' --exclude='LICENSE' \
+            --exclude='img.png' \
+            ./ /tmp/out/
+          echo "--- 部署产物 ---"; ls -la /tmp/out
+          test -f /tmp/out/_worker.js || { echo "::error::_worker.js 缺失，中止部署"; exit 1; }
+
+      # working-directory 指向 /tmp/out 是必需的：仓库根的 wrangler.toml 是
+      # Workers 配置（name/main，无 pages_build_output_dir），留在工作目录会干扰
+      # wrangler pages deploy。产物里也已排除它。
+      - name: Deploy to Cloudflare Pages
+        working-directory: /tmp/out
+        run: |
+          npx --yes wrangler@4.135.0 pages deploy . \
+            --project-name=vpn --branch=main --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.VPNCF_CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.VPNCF_CF_ACCOUNT_ID }}
