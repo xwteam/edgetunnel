@@ -1,10 +1,10 @@
 name: Deploy Mirror
 
-# 上游同步完成后自动部署到 Cloudflare Pages（目标由仓库 secrets 指定）
+# 上游同步完成后自动部署到 Cloudflare Workers（目标由仓库 secrets 指定）。
 #
 # 触发链路：
 #   上游仓库更新
-#     └─> Upstream Sync（sync.yml，每天 UTC 00:00）把上游合并进本 fork 的 main
+#     └─> Upstream Sync（sync.yml，每天 UTC 00:00）合并进本 fork 的 main
 #           └─> 本 workflow 经 workflow_run 触发并部署
 #
 # ⚠️ 为什么用 workflow_run 而不是 on:push —— GitHub 规定：用内置 GITHUB_TOKEN
@@ -34,7 +34,6 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # workflow_run 触发时只在上游同步成功后才部署；其它触发方式直接放行
     if: >
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.conclusion == 'success'
@@ -43,26 +42,32 @@ jobs:
         with:
           ref: main
 
+      # 只取入口脚本。仓库自带的 wrangler.toml 是上游的（name 是版本号，会随上游漂移），
+      # 这里另建一份自己的，避免部署目标被上游改名带偏。
       - name: Prepare artifact
+        env:
+          WORKER_NAME: ${{ secrets.CF_MIRROR_NAME }}
+          KV_ID: ${{ secrets.CF_MIRROR_KV }}
         run: |
+          set -euo pipefail
+          test -f _worker.js || { echo "::error::_worker.js 缺失，中止部署"; exit 1; }
           mkdir -p /tmp/out
-          rsync -a \
-            --exclude='.git' --exclude='.github' --exclude='.gitignore' \
-            --exclude='wrangler.toml' \
-            --exclude='README.md' --exclude='CHANGELOG' --exclude='LICENSE' \
-            --exclude='img.png' \
-            ./ /tmp/out/
-          echo "--- 部署产物 ---"; ls -la /tmp/out
-          test -f /tmp/out/_worker.js || { echo "::error::_worker.js 缺失，中止部署"; exit 1; }
+          cp _worker.js /tmp/out/
+          cat > /tmp/out/wrangler.toml <<EOF
+          name = "${WORKER_NAME}"
+          main = "_worker.js"
+          compatibility_date = "2026-05-29"
+          keep_vars = true
 
-      # working-directory 指向 /tmp/out 是必需的：仓库根的 wrangler.toml 是
-      # Workers 配置（name/main，无 pages_build_output_dir），留在工作目录会干扰
-      # wrangler pages deploy。产物里也已排除它。
-      - name: Deploy to Cloudflare Pages
+          [[kv_namespaces]]
+          binding = "KV"
+          id = "${KV_ID}"
+          EOF
+          echo "--- 部署产物 ---"; ls -la /tmp/out
+
+      - name: Deploy to Cloudflare Workers
         working-directory: /tmp/out
-        run: |
-          npx --yes wrangler@4.135.0 pages deploy . \
-            --project-name=dbgdeios --branch=main --commit-dirty=true
+        run: npx --yes wrangler@4.135.0 deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_MIRROR_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_MIRROR_ACCOUNT }}
