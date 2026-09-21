@@ -51,7 +51,7 @@ jobs:
 
           # 保存本仓库独有的 workflow（上游没有这些文件）
           mkdir -p /tmp/keep
-          for f in deploy-mirror.yml deploy-pages.yml sync-fallback.yml; do
+          for f in deploy-mirror.yml sync-fallback.yml; do
             [ -f ".github/workflows/$f" ] && cp ".github/workflows/$f" /tmp/keep/ || true
           done
 
