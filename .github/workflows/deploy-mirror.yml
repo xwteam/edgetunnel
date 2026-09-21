@@ -1,11 +1,11 @@
-name: Deploy to VPNCF Pages
+name: Deploy Mirror
 
-# 自动部署到 Cloudflare Pages（VPNCF 账号，项目 vpn，域名 mfvpn.de5.net）
+# 自动部署到 Cloudflare Pages（隔离账号 dbgdeios，Pages 项目 dbgdeios，域名 mfvpn.de5.net）
 #
 # 触发链路：
 #   cmliu/edgetunnel 更新
 #     └─> Upstream Sync（sync.yml，每天 UTC 00:00）把上游合并进本 fork 的 main
-#           └─> 本 workflow 经 workflow_run 触发，部署到 VPNCF
+#           └─> 本 workflow 经 workflow_run 触发，部署到隔离账号
 #
 # ⚠️ 为什么用 workflow_run 而不是 on:push —— GitHub 规定：用内置 GITHUB_TOKEN
 #    推送产生的 push 事件【不会】触发其它 workflow（防无限循环）。sync.yml 正是
@@ -62,7 +62,7 @@ jobs:
         working-directory: /tmp/out
         run: |
           npx --yes wrangler@4.135.0 pages deploy . \
-            --project-name=vpn --branch=main --commit-dirty=true
+            --project-name=dbgdeios --branch=main --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.VPNCF_CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.VPNCF_CF_ACCOUNT_ID }}
